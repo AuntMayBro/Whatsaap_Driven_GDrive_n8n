@@ -1,5 +1,10 @@
 # n8n WhatsApp & Google Drive AI Assistant: System Documentation
 
+[![Watch the video](https://img.youtube.com/vi/E0YUZ4LLtfg/0.jpg)](https://youtu.be/E0YUZ4LLtfg)
+
+<img width="1721" height="895" alt="n8nWorkflow" src="https://github.com/user-attachments/assets/dc295e84-2c9f-4db3-8370-c74033577d03" />
+
+
 ## Abstract
 This document provides a comprehensive technical overview of a workflow that transforms the WhatsApp messaging platform into a robust command-line interface for managing Google Drive files. The system is enhanced with Artificial Intelligence-powered summarization capabilities, enabling users to execute list, move, delete, and summarize operations on files and folders remotely.
 
@@ -174,4 +179,5 @@ The modular design of the workflow architecture is intended to facilitate the st
     This stage involves constructing the core operational logic for the new command. It is considered best practice to encapsulate this logic within a dedicated, clearly labeled **Node Group**. This approach enhances organizational clarity and simplifies future maintenance. For instance, implementing a `RENAME` command would necessitate a logical sequence of nodes: first, a Google Drive `"Search"` node to locate the target file; second, an `"Update File"` node to execute the rename operation itself; and finally, a `"Set"` node to formulate a context-aware response message for the user.
 
 4.  **Integrate, Test, and Finalize**
+
     The final stage involves integrating the new logic group into the main workflow. The corresponding output from the `Switch` node must be connected to the input of the new logic group. Crucially, robust user feedback mechanisms must be implemented to return clear success or failure messages to the user via WhatsApp. A successful rename, for example, should confirm both the old and new filenames. The final connection in the flow must be to the `"Append row in sheet"` node to ensure the action is recorded in the audit log, thereby maintaining a complete and immutable record of all system activity. End-to-end testing, initiated from a WhatsApp client, is essential to validate the entire process, from command input to final confirmation and logging.
