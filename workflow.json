@@ -1,0 +1,994 @@
+{
+  "nodes": [
+    {
+      "parameters": {
+        "rules": {
+          "values": [
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 2
+                },
+                "conditions": [
+                  {
+                    "leftValue": "={{ $json.command }}",
+                    "rightValue": "LIST",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    },
+                    "id": "abadd92b-b085-4ab8-87e6-6ed0d7035396"
+                  }
+                ],
+                "combinator": "and"
+              }
+            },
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 2
+                },
+                "conditions": [
+                  {
+                    "id": "1c7177b4-a0fe-4961-b3cc-06bb79e79596",
+                    "leftValue": "={{ $json.command }}",
+                    "rightValue": "DELETE",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals",
+                      "name": "filter.operator.equals"
+                    }
+                  }
+                ],
+                "combinator": "and"
+              }
+            },
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 2
+                },
+                "conditions": [
+                  {
+                    "id": "28416474-ad0d-4d7b-9ddd-ae17ab2de289",
+                    "leftValue": "={{ $json.command }}",
+                    "rightValue": "MOVE",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals",
+                      "name": "filter.operator.equals"
+                    }
+                  }
+                ],
+                "combinator": "and"
+              }
+            },
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 2
+                },
+                "conditions": [
+                  {
+                    "id": "7b16d669-7639-4473-af63-b85b0c354692",
+                    "leftValue": "={{ $json.command }}",
+                    "rightValue": "SUMMARY",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals",
+                      "name": "filter.operator.equals"
+                    }
+                  }
+                ],
+                "combinator": "and"
+              }
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.switch",
+      "typeVersion": 3.2,
+      "position": [
+        -2256,
+        -464
+      ],
+      "id": "98688c6b-ab61-4c2e-9c38-3d1762d33d3d",
+      "name": "Switch"
+    },
+    {
+      "parameters": {
+        "language": "python",
+        "pythonCode": "import re\n\nitem = items[0]\nmessage_text = item.get(\"json\", {}).get(\"messages\", [{}])[0].get(\"text\", {}).get(\"body\", \"\").strip()\n\nresult = {\n    \"json\": {\n        \"originalCommand\": message_text,\n        \"command\": None,\n        \"arg1\": None,\n        \"arg2\": None,\n        \"error\": None\n    }\n}\nmove_match = re.match(r'^\\s*move\\s+(\"([^\"]+)\"|\\S+)\\s+to\\s+(\"([^\"]+)\"|\\S*)\\s*$', message_text, re.IGNORECASE)\n\nif move_match:\n    result[\"json\"][\"command\"] = \"MOVE\"\n    result[\"json\"][\"arg1\"] = move_match.group(2) or move_match.group(1) or \"\"\n    result[\"json\"][\"arg2\"] = move_match.group(4) or move_match.group(3) or \"\"\nelse:\n    command_regex = r'^(\\w+)(?:\\s+(\"([^\"]+)\"|\\S+))?(?:\\s+(\"([^\"]+)\"|\\S+))?$'\n    match = re.match(command_regex, message_text)\n\n    if match:\n        result[\"json\"][\"command\"] = match.group(1).upper()\n        arg1_val = match.group(3) or match.group(2)\n        result[\"json\"][\"arg1\"] = arg1_val if arg1_val is not None else \"\"\n        result[\"json\"][\"arg2\"] = match.group(5) or match.group(4)\n    else:\n        result[\"json\"][\"error\"] = \"Invalid command format. The command could not be parsed.\"\n\nreturn [result]"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -2432,
+        -432
+      ],
+      "id": "a4fc6e5d-b504-4177-9a11-3e2b9b59a3c1",
+      "name": "parseCode"
+    },
+    {
+      "parameters": {
+        "jsCode": "const command = $('WhatsApp Trigger').first().json.messages[0].text.body;\nconst driveItems = $input.all().map(item => item.json);\nconst ROOT_ID = \"<YOUR_ROOT_FOLDER_ID>\";\n\nif (!command.startsWith(\"LIST\")) {\n  return [{ json: { error: \"Invalid command. Must start with LIST.\" } }];\n}\n\nconst path = command.replace(\"LIST\", \"\").trim();\nconst pathParts = path ? path.split('/').filter(p => p) : [];\n\nif (pathParts.length === 0) {\n  const rootItems = driveItems.filter(item =>\n    item.parents?.includes(ROOT_ID)\n  );\n\n  const formattedItems = rootItems.map(item => ({\n    name: item.name,\n    id: item.id,\n    type: item.mimeType.includes(\"folder\") ? \"folder\" : \"file\"\n  }));\n\n  const messageText = formattedItems.length > 0\n    ? formattedItems.map(item => item.type === 'folder' ? `📁 ${item.name}` : `📄 ${item.name}`).join('\\n')\n    : \"The root directory is empty.\";\n\n  return [{ json: { items: formattedItems, message: messageText } }];\n}\n\nlet targetId = ROOT_ID;\nlet depth = 0;\n\nfor (const part of pathParts) {\n  const foundFolder = driveItems.find(item =>\n    item.mimeType === \"application/vnd.google-apps.folder\" &&\n    item.name === part &&\n    item.parents?.includes(targetId)\n  );\n\n  if (foundFolder) {\n    targetId = foundFolder.id;\n    depth++;\n  } else {\n    break;\n  }\n}\n\n// Check if the path was valid\nif (depth < pathParts.length - 1) {\n  // A folder was missing in the middle of the path.\n  return [{ json: { error: `Folder does not exist: ${path}` } }];\n}\n\n\n// Get the final list of items\nconst resultItems = driveItems.filter(item =>\n  item.parents?.includes(targetId)\n);\n\n// Format the output and create the message\nconst formattedItems = resultItems.map(item => ({\n  name: item.name,\n  id: item.id,\n  type: item.mimeType.includes(\"folder\") ? \"folder\" : \"file\"\n}));\n\nconst messageText = formattedItems.length > 0\n  ? formattedItems.map(item => item.type === 'folder' ? `📁 ${item.name}` : `📄 ${item.name}`).join('\\n')\n  : \"This folder is empty.\";\n\n\n// Return a single item with both structured data and the message\nreturn [{\n  json: {\n    items: formattedItems,\n    message: messageText\n  }\n}];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -1872,
+        -912
+      ],
+      "id": "4c1afd31-cbc5-40d4-8123-4e1435c62321",
+      "name": "Code1"
+    },
+    {
+      "parameters": {
+        "updates": [
+          "messages"
+        ],
+        "options": {}
+      },
+      "type": "n8n-nodes-base.whatsAppTrigger",
+      "typeVersion": 1,
+      "position": [
+        -2672,
+        -432
+      ],
+      "id": "893f8c6b-5895-4480-bfbd-d068caa5c591",
+      "name": "WhatsApp Trigger",
+      "webhookId": "<YOUR_WEBHOOK_ID>",
+      "credentials": {
+        "whatsAppTriggerApi": {
+          "id": "<YOUR_CREDENTIAL_ID>",
+          "name": "WhatsApp OAuth account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "send",
+        "phoneNumberId": "<YOUR_PHONE_NUMBER_ID>",
+        "recipientPhoneNumber": "<YOUR_RECIPIENT_PHONE_NUMBER>",
+        "textBody": "={{ $json.message }}",
+        "additionalFields": {
+          "previewUrl": true
+        }
+      },
+      "type": "n8n-nodes-base.whatsApp",
+      "typeVersion": 1,
+      "position": [
+        -1648,
+        -912
+      ],
+      "id": "55034f88-2083-4025-bd78-7dc9a451a5fa",
+      "name": "Send message",
+      "webhookId": "<YOUR_WEBHOOK_ID>",
+      "credentials": {
+        "whatsAppApi": {
+          "id": "<YOUR_CREDENTIAL_ID>",
+          "name": "WhatsApp account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "const drive_items = $input.all().map(e => e.json);\nconst command = $('WhatsApp Trigger').first().json.messages[0].text.body.trim();\n\nfunction getChildren(parentId) {\n  return drive_items.filter(it => Array.isArray(it.parents) && it.parents.includes(parentId));\n}\n\nfunction resolvePath(path) {\n  const parts = path.split('/').filter(Boolean);\n  let currentParentId = \"<YOUR_ROOT_FOLDER_ID>\";\n  let foundItem = null;\n\n  for (let i = 0; i < parts.length; i++) {\n    const part = parts[i];\n    const children = getChildren(currentParentId);\n    foundItem = children.find(c => c.name.toLowerCase() === part.toLowerCase());\n    if (!foundItem) {\n      return null;\n    }\n    currentParentId = foundItem.id;\n  }\n\n  return foundItem;\n}\n\nif (/^delete\\s*$/i.test(command)) {\n  return [{ json: { message: \"Please specify a file or folder to delete.\" } }];\n}\n\nconst deleteMatch = command.match(/^delete\\s+(.+)$/i);\nif (!deleteMatch) {\n  return [{ json: { message: \"Unknown command.\" } }];\n}\n\nconst targetPath = deleteMatch[1].trim();\n\nif (!targetPath.startsWith(\"/\")) {\n  const rootFiles = getChildren(\"<YOUR_ROOT_FOLDER_ID>\");\n  const matches = rootFiles.filter(f => f.name.toLowerCase() === targetPath.toLowerCase());\n\n  if (matches.length === 0) {\n    return [{ json: { message: `File or folder '${targetPath}' not found in root.` } }];\n  }\n  if (matches.length > 1) {\n    return [{ json: { message: `Multiple '${targetPath}' found. Please specify folder.` } }];\n  }\n\n  const found = matches[0];\n  return [{\n    json: {\n      message: `DELETED '${found.name}'`,\n      id: found.id\n    }\n  }];\n}\n\nconst foundItem = resolvePath(targetPath);\nif (!foundItem) {\n  return [{ json: { message: `Path '${targetPath}' not found.` } }];\n}\n\nreturn [{\n  json: {\n    message: `DELETED '${foundItem.name}'. `,\n    id: foundItem.id\n  }\n}];\n"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -1872,
+        -672
+      ],
+      "id": "1a4f82e6-8aa2-4fb0-90ba-dd6e22ecd7b3",
+      "name": "Code"
+    },
+    {
+      "parameters": {
+        "operation": "send",
+        "phoneNumberId": "<YOUR_PHONE_NUMBER_ID>",
+        "recipientPhoneNumber": "<YOUR_RECIPIENT_PHONE_NUMBER>",
+        "textBody": "={{ $('Code').item.json.message }}",
+        "additionalFields": {}
+      },
+      "type": "n8n-nodes-base.whatsApp",
+      "typeVersion": 1,
+      "position": [
+        -1648,
+        -672
+      ],
+      "id": "216715c2-c090-47a7-a70a-1bccb5966f5a",
+      "name": "deleteConfirmation",
+      "webhookId": "<YOUR_WEBHOOK_ID>",
+      "credentials": {
+        "whatsAppApi": {
+          "id": "<YOUR_CREDENTIAL_ID>",
+          "name": "WhatsApp account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "deleteFile",
+        "fileId": {
+          "__rl": true,
+          "value": "={{ $json.id }}",
+          "mode": "id"
+        },
+        "options": {
+          "deletePermanently": true
+        }
+      },
+      "type": "n8n-nodes-base.googleDrive",
+      "typeVersion": 3,
+      "position": [
+        -2352,
+        -656
+      ],
+      "id": "737b46b3-0c76-43c2-afbc-a8a0442b120a",
+      "name": "Delete a file2",
+      "credentials": {
+        "googleDriveOAuth2Api": {
+          "id": "<YOUR_CREDENTIAL_ID>",
+          "name": "Google Drive account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "const drive_items = $input.all().map(e => e.json);\nconst command = $('WhatsApp Trigger').first().json.messages[0].text.body.trim();\n\n// Root folder ID\nconst ROOT_ID = \"<YOUR_ROOT_FOLDER_ID>\";\n\n// Helper: Get children of a folder\nfunction getChildren(parentId) {\n  return drive_items.filter(it => Array.isArray(it.parents) && it.parents.includes(parentId));\n}\n\n// Helper: Resolve path to item (file or folder)\nfunction resolvePath(path) {\n  const parts = path.split('/').filter(Boolean);\n  let currentParentId = ROOT_ID;\n  let foundItem = null;\n\n  for (const part of parts) {\n    const children = getChildren(currentParentId);\n    foundItem = children.find(c => c.name.toLowerCase() === part.toLowerCase());\n    if (!foundItem) return null;\n    currentParentId = foundItem.id;\n  }\n  return foundItem;\n}\n\n// Check for MOVE command\nif (/^move\\s*$/i.test(command)) {\n  return [{\n    json: {\n      message: \"Please specify file in format:\\nMOVE folder1/file to folder2/folder3\"\n    }\n  }];\n}\n\n// Parse MOVE command\nconst moveMatch = command.match(/^move\\s+(.+?)\\s+to\\s*(.*)$/i);\nif (!moveMatch) {\n  return [{ json: { message: \"Invalid MOVE command format.\" } }];\n}\n\nconst sourcePath = moveMatch[1].trim();\nconst destPath = moveMatch[2].trim();\n\n// Find source file\nconst sourceItem = resolvePath(sourcePath.startsWith(\"/\") ? sourcePath : `/${sourcePath}`);\nif (!sourceItem) {\n  return [{ json: { message: \"File not found.\" } }];\n}\nif (sourceItem.mimeType === \"application/vnd.google-apps.folder\") {\n  return [{ json: { message: \"You can only move files, not folders.\" } }];\n}\n\n// Find destination folder\nlet destFolder;\nif (destPath === \"\") {\n  // Move to root\n  destFolder = { id: ROOT_ID, name: \"Root\" };\n} else {\n  destFolder = resolvePath(destPath.startsWith(\"/\") ? destPath : `/${destPath}`);\n  if (!destFolder) {\n    return [{ json: { message: \"Folder not found.\" } }];\n  }\n  if (destFolder.mimeType !== \"application/vnd.google-apps.folder\") {\n    return [{ json: { message: \"Destination must be a folder.\" } }];\n  }\n}\n\n// Success response\nreturn [{\n  json: {\n    message: `File moved from '${sourcePath}' to '${destPath || \"Root\"}'.`,\n    fileId: sourceItem.id,\n    destinationId: destFolder.id\n  }\n}];\n"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -1872,
+        -384
+      ],
+      "id": "f110c216-1aee-4f5b-9cb4-644c3168d700",
+      "name": "Code2"
+    },
+    {
+      "parameters": {
+        "operation": "move",
+        "fileId": {
+          "__rl": true,
+          "value": "={{ $json.fileId }}",
+          "mode": "id"
+        },
+        "driveId": {
+          "__rl": true,
+          "mode": "list",
+          "value": "My Drive"
+        },
+        "folderId": {
+          "__rl": true,
+          "value": "={{ $json.destinationId }}",
+          "mode": "id"
+        }
+      },
+      "type": "n8n-nodes-base.googleDrive",
+      "typeVersion": 3,
+      "position": [
+        -1696,
+        -384
+      ],
+      "id": "48f8514c-bea8-435a-8389-1cb35933e349",
+      "name": "Move file",
+      "credentials": {
+        "googleDriveOAuth2Api": {
+          "id": "<YOUR_CREDENTIAL_ID>",
+          "name": "Google Drive account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "const msgText = $('WhatsApp Trigger').first().json.messages?.[0]?.text?.body?.trim() || \"\";\nconst drive_items = $input.all().map(e => e.json);\n\nconst match = msgText.match(/^(\\w+)(?:\\s+(.+))?$/i);\nconst cmd = {\n  command: match ? match[1].toUpperCase() : null,\n  arg1: match ? match[2]?.trim() : null\n};\n\nif (cmd.command !== \"SUMMARY\") {\n  return [{\n    json: {\n      action: \"ignore\",\n      message: \"Not a SUMMARY command.\"\n    }\n  }];\n}\n\nif (!cmd.arg1) {\n  return [{\n    json: {\n      action: \"error\",\n      message: \"Please specify a file or folder after SUMMARY.\"\n    }\n  }];\n}\n\nif (!drive_items.length) {\n  return [{\n    json: {\n      action: \"error\",\n      message: `Could not find the file or folder: ${cmd.arg1}`\n    }\n  }];\n}\n\nif (drive_items.length === 1 && drive_items[0].mimeType !== 'application/vnd.google-apps.folder') {\n  return [{\n    json: {\n      action: \"summarizeFile\",\n      id: drive_items[0].id,\n      name: drive_items[0].name,\n      mimeType: drive_items[0].mimeType\n    }\n  }];\n}\n\nconst folder = drive_items.find(f => f.mimeType === 'application/vnd.google-apps.folder');\nif (!folder) {\n  return [{\n    json: {\n      action: \"error\",\n      message: `Could not find a folder named: ${cmd.arg1}`\n    }\n  }];\n}\n\nconst filesInFolder = drive_items.filter(f =>\n  f.mimeType !== 'application/vnd.google-apps.folder' &&\n  Array.isArray(f.parents) &&\n  f.parents.includes(folder.id)\n);\nreturn filesInFolder.map(f => ({\n  json: {\n    id: f.id,\n    name: f.name,\n    mimeType: f.mimeType\n  }\n}));"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -2448,
+        -176
+      ],
+      "id": "8e1031c4-52a9-4a28-a764-a81930986101",
+      "name": "Code3"
+    },
+    {
+      "parameters": {
+        "batchSize": "={{ $input.all().length }}",
+        "options": {
+          "reset": false
+        }
+      },
+      "type": "n8n-nodes-base.splitInBatches",
+      "typeVersion": 3,
+      "position": [
+        -2048,
+        -176
+      ],
+      "id": "49c3fc5f-8bd2-46b7-8cd1-a4b0fbf68eb8",
+      "name": "Loop Over Items"
+    },
+    {
+      "parameters": {
+        "operation": "download",
+        "fileId": {
+          "__rl": true,
+          "value": "={{ $json.id }}",
+          "mode": "id"
+        },
+        "options": {
+          "googleFileConversion": {
+            "conversion": {
+              "docsToFormat": "text/plain",
+              "slidesToFormat": "application/pdf",
+              "sheetsToFormat": "application/pdf"
+            }
+          }
+        }
+      },
+      "type": "n8n-nodes-base.googleDrive",
+      "typeVersion": 3,
+      "position": [
+        -1696,
+        -160
+      ],
+      "id": "a3866ff2-b129-4008-9472-349c521c9d8a",
+      "name": "Download file",
+      "credentials": {
+        "googleDriveOAuth2Api": {
+          "id": "<YOUR_CREDENTIAL_ID>",
+          "name": "Google Drive account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "resource": "image",
+        "operation": "analyze",
+        "modelId": {
+          "__rl": true,
+          "value": "models/gemini-1.5-flash",
+          "mode": "list",
+          "cachedResultName": "models/gemini-1.5-flash"
+        },
+        "text": "What's in this image? Give a short and concise summary.",
+        "inputType": "={{ $json.id }}",
+        "options": {}
+      },
+      "type": "@n8n/n8n-nodes-langchain.googleGemini",
+      "typeVersion": 1,
+      "position": [
+        -1504,
+        96
+      ],
+      "id": "7eef165a-72bc-4894-b116-aae67b8ab10e",
+      "name": "Analyze image",
+      "credentials": {
+        "googlePalmApi": {
+          "id": "<YOUR_CREDENTIAL_ID>",
+          "name": "Google Gemini(PaLM) Api account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "resource": "document",
+        "modelId": {
+          "__rl": true,
+          "value": "models/gemini-1.5-flash",
+          "mode": "list",
+          "cachedResultName": "models/gemini-1.5-flash"
+        },
+        "text": "What's in this image? Give a short and concise summary.",
+        "inputType": "={{ $json.id }}",
+        "options": {}
+      },
+      "type": "@n8n/n8n-nodes-langchain.googleGemini",
+      "typeVersion": 1,
+      "position": [
+        -1248,
+        -144
+      ],
+      "id": "1779e29c-c369-4391-9929-41dec494b4d1",
+      "name": "Analyze document",
+      "credentials": {
+        "googlePalmApi": {
+          "id": "<YOUR_CREDENTIAL_ID>",
+          "name": "Google Gemini(PaLM) Api account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "99969ace-292a-4261-8930-c77dea5a711f",
+              "leftValue": "={{ $json.mimeType }}",
+              "rightValue": "image/jpeg",
+              "operator": {
+                "type": "string",
+                "operation": "equals",
+                "name": "filter.operator.equals"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        -1488,
+        -160
+      ],
+      "id": "648df3b1-5cff-4c30-aa05-ac3d41546766",
+      "name": "If"
+    },
+    {
+      "parameters": {
+        "operation": "send",
+        "phoneNumberId": "<YOUR_PHONE_NUMBER_ID>",
+        "recipientPhoneNumber": "<YOUR_RECIPIENT_PHONE_NUMBER>",
+        "textBody": "=File.  {{ $json.content.parts[0].text }}",
+        "additionalFields": {}
+      },
+      "type": "n8n-nodes-base.whatsApp",
+      "typeVersion": 1,
+      "position": [
+        -1024,
+        -144
+      ],
+      "id": "ce45aeed-8c0a-4fa7-9cb0-091d72ec9d3d",
+      "name": "senddocumentSummary",
+      "webhookId": "<YOUR_WEBHOOK_ID>",
+      "credentials": {
+        "whatsAppApi": {
+          "id": "<YOUR_CREDENTIAL_ID>",
+          "name": "WhatsApp account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "send",
+        "phoneNumberId": "<YOUR_PHONE_NUMBER_ID>",
+        "recipientPhoneNumber": "<YOUR_RECIPIENT_PHONE_NUMBER>",
+        "textBody": "=File.  {{ $json.content.parts[0].text }}",
+        "additionalFields": {}
+      },
+      "type": "n8n-nodes-base.whatsApp",
+      "typeVersion": 1,
+      "position": [
+        -1296,
+        96
+      ],
+      "id": "3c3bfc9a-3eb2-485c-86a2-f59c9593eed6",
+      "name": "sendImageSummary",
+      "webhookId": "<YOUR_WEBHOOK_ID>",
+      "credentials": {
+        "whatsAppApi": {
+          "id": "<YOUR_CREDENTIAL_ID>",
+          "name": "WhatsApp account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "append",
+        "documentId": {
+          "__rl": true,
+          "value": "<YOUR_SPREADSHEET_ID>",
+          "mode": "list",
+          "cachedResultName": "AuditLog",
+          "cachedResultUrl": "https://docs.google.com/spreadsheets/d/<YOUR_SPREADSHEET_ID>/edit?usp=drivesdk"
+        },
+        "sheetName": {
+          "__rl": true,
+          "value": "Sheet1",
+          "mode": "list",
+          "cachedResultName": "Sheet1",
+          "cachedResultUrl": "https://docs.google.com/spreadsheets/d/<YOUR_SPREADSHEET_ID>/edit#gid=0"
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "Timestamp": "={{$now}}",
+            "Command": "={{ $('WhatsApp Trigger').all()[0].json.messages[0].text.body }}",
+            "Details": "={{ $json.senderId }}, {{ $json.senderName }}",
+            "Status": "Success"
+          },
+          "matchingColumns": [],
+          "schema": [
+            {
+              "id": "Timestamp",
+              "displayName": "Timestamp",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "Command",
+              "displayName": "Command",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "Status",
+              "displayName": "Status",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "Details",
+              "displayName": "Details",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            }
+          ],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": false
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.6,
+      "position": [
+        -2720,
+        -656
+      ],
+      "id": "67bff40e-fc5c-444c-b9cd-c70387d0e5fa",
+      "name": "Append row in sheet",
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "id": "<YOUR_CREDENTIAL_ID>",
+          "name": "Google Sheets account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "send",
+        "phoneNumberId": "<YOUR_PHONE_NUMBER_ID>",
+        "recipientPhoneNumber": "<YOUR_RECIPIENT_PHONE_NUMBER>",
+        "textBody": "={{ $('Code2').item.json.message }}",
+        "additionalFields": {
+          "previewUrl": false
+        }
+      },
+      "type": "n8n-nodes-base.whatsApp",
+      "typeVersion": 1,
+      "position": [
+        -1488,
+        -384
+      ],
+      "id": "668ccd62-32af-43b8-9043-1b23fd489045",
+      "name": "movedMessage",
+      "webhookId": "<YOUR_WEBHOOK_ID>",
+      "credentials": {
+        "whatsAppApi": {
+          "id": "<YOUR_CREDENTIAL_ID>",
+          "name": "WhatsApp account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "resource": "fileFolder",
+        "searchMethod": "query",
+        "queryString": "=",
+        "returnAll": true,
+        "filter": {},
+        "options": {
+          "fields": "={{ [\"id\",\"name\",\"parents\",\"mimeType\"] }}"
+        }
+      },
+      "type": "n8n-nodes-base.googleDrive",
+      "typeVersion": 3,
+      "position": [
+        -2064,
+        -912
+      ],
+      "id": "9547b0af-3554-491a-8749-cbebf8eb89aa",
+      "name": "Search files and folders List",
+      "credentials": {
+        "googleDriveOAuth2Api": {
+          "id": "<YOUR_CREDENTIAL_ID>",
+          "name": "Google Drive account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "resource": "fileFolder",
+        "searchMethod": "query",
+        "returnAll": true,
+        "filter": {},
+        "options": {
+          "fields": "={{ [\"id\",\"name\",\"parents\",\"mimeType\"] }}"
+        }
+      },
+      "type": "n8n-nodes-base.googleDrive",
+      "typeVersion": 3,
+      "position": [
+        -2048,
+        -672
+      ],
+      "id": "2fc246fd-ef77-474d-8c81-37966b0d0965",
+      "name": "Search files and folders Delete",
+      "credentials": {
+        "googleDriveOAuth2Api": {
+          "id": "<YOUR_CREDENTIAL_ID>",
+          "name": "Google Drive account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "resource": "fileFolder",
+        "searchMethod": "query",
+        "returnAll": true,
+        "filter": {},
+        "options": {
+          "fields": "={{ [\"id\",\"name\",\"parents\",\"mimeType\"] }}"
+        }
+      },
+      "type": "n8n-nodes-base.googleDrive",
+      "typeVersion": 3,
+      "position": [
+        -2048,
+        -384
+      ],
+      "id": "df00f2ab-c8b1-494c-aed4-b8c77b946fa0",
+      "name": "Search files and folders Move",
+      "credentials": {
+        "googleDriveOAuth2Api": {
+          "id": "<YOUR_CREDENTIAL_ID>",
+          "name": "Google Drive account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "resource": "fileFolder",
+        "searchMethod": "query",
+        "returnAll": true,
+        "filter": {},
+        "options": {
+          "fields": "={{ [\"id\",\"name\",\"parents\",\"mimeType\"] }}"
+        }
+      },
+      "type": "n8n-nodes-base.googleDrive",
+      "typeVersion": 3,
+      "position": [
+        -2672,
+        -176
+      ],
+      "id": "a5f22b57-0068-491d-9245-c2312558fcec",
+      "name": "Search files and folders Summary",
+      "credentials": {
+        "googleDriveOAuth2Api": {
+          "id": "<YOUR_CREDENTIAL_ID>",
+          "name": "Google Drive account"
+        }
+      }
+    }
+  ],
+  "connections": {
+    "Switch": {
+      "main": [
+        [
+          {
+            "node": "Search files and folders List",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Search files and folders Delete",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Search files and folders Move",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Search files and folders Summary",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "parseCode": {
+      "main": [
+        [
+          {
+            "node": "Switch",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Code1": {
+      "main": [
+        [
+          {
+            "node": "Send message",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "WhatsApp Trigger": {
+      "main": [
+        [
+          {
+            "node": "parseCode",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Send message": {
+      "main": [
+        [
+          {
+            "node": "Append row in sheet",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Code": {
+      "main": [
+        [
+          {
+            "node": "deleteConfirmation",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Delete a file2",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "deleteConfirmation": {
+      "main": [
+        [
+          {
+            "node": "Append row in sheet",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Delete a file2": {
+      "main": [
+        []
+      ]
+    },
+    "Code2": {
+      "main": [
+        [
+          {
+            "node": "Move file",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Move file": {
+      "main": [
+        [
+          {
+            "node": "movedMessage",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Code3": {
+      "main": [
+        [
+          {
+            "node": "Loop Over Items",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Append row in sheet",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Loop Over Items": {
+      "main": [
+        [],
+        [
+          {
+            "node": "Download file",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Download file": {
+      "main": [
+        [
+          {
+            "node": "If",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Analyze image": {
+      "main": [
+        [
+          {
+            "node": "Loop Over Items",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "sendImageSummary",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Analyze document": {
+      "main": [
+        [
+          {
+            "node": "Loop Over Items",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "senddocumentSummary",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "If": {
+      "main": [
+        [
+          {
+            "node": "Analyze image",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Analyze document",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "movedMessage": {
+      "main": [
+        [
+          {
+            "node": "Append row in sheet",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Search files and folders List": {
+      "main": [
+        [
+          {
+            "node": "Code1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Search files and folders Delete": {
+      "main": [
+        [
+          {
+            "node": "Code",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Search files and folders Move": {
+      "main": [
+        [
+          {
+            "node": "Code2",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Search files and folders Summary": {
+      "main": [
+        [
+          {
+            "node": "Code3",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "pinData": {},
+  "meta": {
+    "templateCredsSetupCompleted": true,
+    "instanceId": "<YOUR_INSTANCE_ID>"
+  }
+}

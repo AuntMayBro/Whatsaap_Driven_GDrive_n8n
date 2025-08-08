@@ -1,0 +1,24 @@
+# docker-compose.yml
+# This file sets up the n8n service using Docker Compose.
+
+version: '3.7'
+
+services:
+  n8n:
+    image: n8nio/n8n
+    container_name: n8n_whatsapp_assistant
+    restart: always
+    ports:
+      - "5678:5678"
+    env_file:
+      - ./.env
+    volumes:
+      - n8n_data:/home/node/.n8n
+      # You can optionally mount the local folder to the container
+      # to have access to local files if needed by workflows.
+      # - ./local_files:/files
+
+volumes:
+  n8n_data:
+    # This named volume ensures that your n8n data (workflows, credentials)
+    # persists even if the container is removed and recreated.
