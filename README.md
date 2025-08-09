@@ -4,7 +4,10 @@
 <div align="center">
   
 # WATCH THE VIDEO
+
   
+[![Watch the video](https://img.youtube.com/vi/FpoFa-6uHb4/0.jpg)](https://youtu.be/FpoFa-6uHb4)
+
 [![Watch the video](https://img.youtube.com/vi/dqWlBKcJMMk/0.jpg)](https://youtu.be/dqWlBKcJMMk)
 
 </div>
@@ -188,6 +191,7 @@ The modular design of the workflow architecture is intended to facilitate the st
 4.  **Integrate, Test, and Finalize**
 
     The final stage involves integrating the new logic group into the main workflow. The corresponding output from the `Switch` node must be connected to the input of the new logic group. Crucially, robust user feedback mechanisms must be implemented to return clear success or failure messages to the user via WhatsApp. A successful rename, for example, should confirm both the old and new filenames. The final connection in the flow must be to the `"Append row in sheet"` node to ensure the action is recorded in the audit log, thereby maintaining a complete and immutable record of all system activity. End-to-end testing, initiated from a WhatsApp client, is essential to validate the entire process, from command input to final confirmation and logging.
+
 
 
 
